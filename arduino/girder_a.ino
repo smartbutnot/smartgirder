@@ -37,9 +37,9 @@ boolean forceRefresh=true;
 int graphRotateDelay = 10;
 
 //Control brightness by adjusting RGB values. Brightness is a percentage so brightness=50 turns 250,250,250 into 125,125,125
-const int dimHour=21;
+const int dimHour=22;
 const int brightHour=7;
-const int dimBrightness=25;
+const int dimBrightness=20;
 const int brightBrightness=100;
 int brightness=dimBrightness;
 
@@ -209,7 +209,7 @@ void loop() {
 
 
 
-  delay(1000);
+  //delay(1000);
 }
 
 void printWifiData() {
