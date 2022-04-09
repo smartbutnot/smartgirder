@@ -1,5 +1,4 @@
 int thisHour = 0;
-int lastHour = 0;
 
 // Every hour (or 20s after startup) sync the local clock with the NTP client
 void sync_clock(void)
@@ -45,16 +44,14 @@ boolean displayClock() {
 
   thisHour = hour(local);
 
-  if (thisHour == dimHour and not thisHour == lastHour) {
+  if ((thisHour == dimHour) and not (brightness == dimBrightness)) {
     brightness = dimBrightness;
     forceRefresh = true;
   }
-  else if (thisHour == brightHour and not thisHour == lastHour) {
+  else if ((thisHour == brightHour) and not (brightness == brightBrightness)) {
     brightness = brightBrightness;
     forceRefresh = true;;
   }
-
-  lastHour = thisHour;
 
   int xOffset = clockOffset;
   display.fillRect(xOffset + 32, 0, 32, 32, display.color565(0, 0, 0));
@@ -149,6 +146,7 @@ void displayTimer() {
   else {
     Serial.println("Timer end.");
     timerMode = false;
+    display.fillRect(xOffset, 0, 64, 32, display.color565(0, 0, 0));
     for (int i = 0; i < 4; i++) {
       display.setTextSize(2);
       display.setCursor(xOffset + 2, 8);
