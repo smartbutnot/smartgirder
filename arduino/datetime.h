@@ -1,46 +1,34 @@
 int thisHour = 0;
 
-// Every hour (or 20s after startup) sync the local clock with the NTP client
-void sync_clock(void)
-{
-  if ((now() > syncTimeout))
-  {
-    Serial.println("Update local clock");
-    setTime(timeClient.getUTCEpochTime());
-    syncTimeout = now() + 3600;
 
-    time_t utc = now();
-    time_t local = myTZ->toLocal(utc, &tcr);
-    Serial.print(hour(local));
-    Serial.print(":");
-    Serial.print(minute(local));
-    Serial.print(" ");
-    Serial.print(dayShortStr(weekday(local)));
-    Serial.print(" ");
-    Serial.print(day(local));
-    Serial.print("/");
-    Serial.println(month(local));
-  }
+void printDateTime(time_t t, const char *tz)
+{
+  char buf[32];
+  char m[4];    // temporary storage for month string (DateStrings.cpp uses shared buffer)
+  strcpy(m, monthShortStr(month(t)));
+  sprintf(buf, "%.2d:%.2d:%.2d %s %.2d %s %d %s",
+          hour(t), minute(t), second(t), dayShortStr(weekday(t)), day(t), m, year(t), tz);
+  Serial.println(buf);
 }
+
+//We register this function with NTPClient_Generic so it tells us when we successfully update
+void NTPcallback(NTPClient *c){
+  time_t ep=c->getUTCEpochTime();
+  time_t local = myTZ->toLocal(ep, &tcr);
+  Serial.print("NTP update received: ");
+  printDateTime(local,tcr -> abbrev);
+  ntpForce=now()+3600;
+}
+
 
 //Show the day of week, date and time
 
 boolean displayClock() {
 
-  time_t utc = now();
-  time_t local = myTZ->toLocal(utc, &tcr);
 
-  /*
-    Serial.print(hour(local));
-    Serial.print(":");
-    Serial.print(minute(local));
-    Serial.print(" ");
-    Serial.print(dayShortStr(weekday(local)));
-    Serial.print(" ");
-    Serial.print(day(local));
-    Serial.print("/");
-    Serial.println(month(local));
-  */
+  time_t utc=timeClient.getUTCEpochTime();
+  time_t local = myTZ->toLocal(utc, &tcr);
+  //printDateTime(local, tcr -> abbrev);
 
   thisHour = hour(local);
 
@@ -88,13 +76,23 @@ boolean displayClock() {
   display.print(thisHour);
   display.setCursor(xOffset + 32 + 12, 23);
   display.print(":");
+  display.setTextColor(rgbColorBrightness(250, 80, 0, brightness));
   display.setCursor(xOffset + 32 + 18, 23);
   if (minute(local) < 10) {
     display.print("0");
     display.setCursor(xOffset + 32 + 24, 23);
   }
   display.print(minute(local));
-
+  if (now()>ntpForce){
+    //Somehow we've failed to keep the NTP signal up to date. Display a warning pixel.
+    display.fillRect(255, 0, 1, 1, display.color565(255, 0, 0));
+    if (now()>(ntpForce+600)){
+      //Still out of time sync, so try resetting stuff.
+      timeClient.end();
+      timeClient.begin();
+      ntpForce=now()+600;
+    }
+  }
   display.show();
 
   return true;
@@ -105,7 +103,7 @@ boolean displayClock() {
 void displayTimer() {
 
   int xOffset = timerOffset;
-  long secsRemain = timerEpoch - now();
+  long secsRemain = timerEpoch - timeClient.getUTCEpochTime();
 
   //Display a timer if it's above 0 and below 100 minutes (too many digits at this size otherwise and don't want to show a timer all day long)
   if (secsRemain > 0 and secsRemain < 6000) {
@@ -140,6 +138,7 @@ void displayTimer() {
     else {
       display.print(secRemain);
     }
+    
     display.show();
 
   }
