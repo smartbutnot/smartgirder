@@ -6,6 +6,8 @@
 #include <NTPClient_Generic.h>
 #include <Timezone_Generic.h>
 
+#include "secrets.h"
+
 //MQTT and WiFi clients
 WiFiClient espClient;
 PubSubClient client(espClient);
@@ -17,7 +19,12 @@ TimeChangeRule mySTD = {"GMT", Last, Sun, Oct, 2, 0};         // Standard Time
 Timezone *myTZ;
 TimeChangeRule *tcr;        // pointer to the time change rule, use to get TZ abbrev
 WiFiUDP ntpUDP;
-NTPClient timeClient(ntpUDP,"europe.pool.ntp.org");
+//NTP update every 5 mins 5.5 secs
+NTPClient timeClient(ntpUDP,ntp_server,0,305500);
+
+#define NTP_DBG_PORT                Serial
+#define _NTP_LOGLEVEL_              4
+
 
 //Place each panel on the chain - panels are 64 wide, we expect 4
 const int tflOffset=0;
@@ -31,7 +38,7 @@ const int clockOffset=192;
 boolean high=true;
 boolean timerMode=false;
 unsigned long timerEpoch;
-long syncTimeout;
+long ntpForce;
 String clientId = "Girder-";
 boolean forceRefresh=true;
 int graphRotateDelay = 10;
@@ -51,8 +58,6 @@ int brightness=dimBrightness;
 #include "dashboard.h"
 #include "topichandler.h"
 #include "datetime.h"
-
-#include "secrets.h"
 
 
 //Connect to a local MQTT server that provides all the data
@@ -92,6 +97,7 @@ void mqttConnect() {
       client.subscribe("planes/#");
       client.subscribe("thermostat/#");
       client.subscribe("plants/#");
+      client.subscribe("meater/#");
       
     }else {
       Serial.print("MQTT connection failed, attempt ");
@@ -113,11 +119,16 @@ void wifiConnect(){
 
 void setup() {
 
+
+
   //Turn the LED on the matrixportal red while we're setting up
   pinMode(13, OUTPUT);
   digitalWrite(13, HIGH);
 
   Serial.begin(115200);
+
+  timeClient.setUpdateCallback(*NTPcallback);
+  timeClient.setRetryInterval(60000);
 
   //Set an MQTT client name of "Girder-[randomnumber]" to avoid clashes with multiple devices
   randomSeed(analogRead(0));
@@ -133,11 +144,15 @@ void setup() {
 
   //Wifi
   wifiConnect();
-  String fv = WiFi.firmwareVersion();
-  if (fv < WIFI_FIRMWARE_LATEST_VERSION) {
-    Serial.println("Please upgrade the firmware");
+  String wfv = WiFi.firmwareVersion();
+  Serial.print(F("\nBoard ")); Serial.print(BOARD_NAME);
+  Serial.print(F(" with ")); Serial.print(NTPCLIENT_GENERIC_VERSION);
+  Serial.print(F(" and WiFi firmware ")); Serial.println(wfv);
+  
+  if (wfv < WIFI_FIRMWARE_LATEST_VERSION) {
+    Serial.print("Newer WiFi firmware available: ");
+    Serial.println(WIFI_FIRMWARE_LATEST_VERSION);
   }
-  Serial.print("You're connected to the network");
   printWifiData();
 
   //MQTT
@@ -148,24 +163,16 @@ void setup() {
   //Time
   myTZ = new Timezone(myDST, mySTD);
   timeClient.begin();
-  timeClient.setUpdateInterval(24*60*60*1000);
-  syncTimeout=now()+20;
   
   brightness=brightBrightness;
+
+  ntpForce=now()+3600;;
 
 }
 
 void loop() {
 
-  //Blink the LED on the matrixportal, useful for debugging to show the board is alive
-  if(high){
-    digitalWrite(13, HIGH);
-    high=false;
-  }
-  else{
-    digitalWrite(13, LOW);
-    high=true;
-  }
+  
 
   //Check we're on WiFi and have an MQTT connection, reconnect if not
   wifiConnect();
@@ -176,6 +183,8 @@ void loop() {
 
   //MQTT loop to pick up messages
   client.loop();
+
+
 
   //Replace the TFL panel with a countdown if we pick up an Alexa timer
   if(timerMode){
@@ -189,8 +198,10 @@ void loop() {
   if (showCar and not showFlight){
     displayCarLocation();
   }
+
   //Show the network graph and rotate it as needed
   displayNetworkGraph(nowSecs);
+
   //Show the clock and update it as needed
   displayClock();
 
@@ -202,13 +213,24 @@ void loop() {
     displayWeather();
     forceRefresh=false;
   }
-  
-  //Update the NTP client (this doesn't do anything unless we've hit the setUpdateInterval time) and sync to it
+
+  //Update the NTP client (this doesn't do anything unless we've hit the setUpdateInterval time)
   timeClient.update();
-  sync_clock();
 
-
-
+  //if (nowSecs>ntpForce){
+  //  timeClient.forceUpdate();
+  //  display.fillRect(0, 0, 256, 32, display.color565(0, 0, 0));
+  //  display.fillRect(0, 0, 5, 5, display.color565(255, 0, 0));
+  //  delay(10000); 
+  //  WiFi.disconnect();
+  //  wifiConnect();
+  //  mqttConnect();
+  //  timeClient.begin();
+  //  ntpForce=nowSecs+3600;
+  //}
+  
+  
+  //sync_clock();
   //delay(1000);
 }
 
