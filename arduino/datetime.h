@@ -85,11 +85,20 @@ boolean displayClock() {
   display.print(minute(local));
   if (now()>ntpForce){
     //Somehow we've failed to keep the NTP signal up to date. Display a warning pixel.
-    display.fillRect(255, 0, 1, 1, display.color565(255, 0, 0));
+    display.fillRect(257, 0, 1, 1, display.color565(255, 0, 0));
+    display.show();
     if (now()>(ntpForce+600)){
+      display.fillRect(257, 0, 2, 2, display.color565(255, 0, 0));
+      display.show();
       //Still out of time sync, so try resetting stuff.
-      timeClient.end();
-      timeClient.begin();
+      //WiFi.disconnect();
+      //WiFi.end();
+      //WiFiStatus = WL_IDLE_STATUS;
+      bool forceOK=timeClient.forceUpdate();
+      if (forceOK){
+        display.fillRect(257, 0, 2, 2, display.color565(0, 255, 0));
+        display.show();
+      }
       ntpForce=now()+600;
     }
   }
